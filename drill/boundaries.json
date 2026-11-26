@@ -1,0 +1,73 @@
+{
+  "$comment": [
+    "The boundary list. This file is the specification of what the drill proves;",
+    "the harness is generic. Add a boundary here, not in drill.py.",
+    "",
+    "Each row: which window to catch the pipeline inside (window, a named predicate",
+    "over the spool snapshot), what the lake does to it (lake: ack | drop | dead),",
+    "the knobs that widen the window (env), the same knobs relaxed for the restart",
+    "(restart_env), the records the drill appends before and after the kill, and",
+    "what the merged lake export must hold afterwards (expect).",
+    "",
+    "expect.offsets is half-open: [from, to)."
+  ],
+  "boundaries": [
+    {
+      "name": "post-emit-pre-batch",
+      "boundary": "post-emit-pre-batch",
+      "window": "post_emit_pre_batch",
+      "lake": "ack",
+      "claim": "the cursor already covers the lines the batcher still holds in memory, so the kill loses exactly that batch and duplicates none of it: stated loss, no duplicate work",
+      "append": { "from": 0, "count": 5, "pad": 0 },
+      "append_after": { "from": 5, "count": 3, "pad": 0 },
+      "env": { "DRILL_BATCH_HOLD_MS": 60000, "DRILL_BATCH_MAX_RECORDS": 100000 },
+      "restart_env": { "DRILL_BATCH_HOLD_MS": 20, "DRILL_BATCH_MAX_RECORDS": 100000 },
+      "expect": { "offsets": [5, 8], "bundles": 1 }
+    },
+    {
+      "name": "post-batch-pre-send",
+      "boundary": "post-batch-pre-send",
+      "window": "post_batch_pre_send",
+      "lake": "dead",
+      "claim": "the receipt's bytes were published before the receipt existed, so the receipt survives the kill and the restart ships the whole backlog: zero loss",
+      "append": { "from": 0, "count": 40, "pad": 24576 },
+      "env": { "DRILL_BATCH_HOLD_MS": 20, "DRILL_BATCH_MAX_RECORDS": 40, "DRILL_FAULT": "slow-write:150" },
+      "restart_env": { "DRILL_BATCH_HOLD_MS": 20, "DRILL_BATCH_MAX_RECORDS": 40, "DRILL_FAULT": "" },
+      "expect": { "offsets": [0, 40], "bundles": 1 }
+    },
+    {
+      "name": "post-batch-pre-send@mid-write",
+      "boundary": "post-batch-pre-send",
+      "window": "staged_write_in_progress",
+      "lake": "dead",
+      "claim": "a kill inside the write itself leaves no torn bundle at a published path and no receipt without whole bytes; the half-written bytes are invisible and the restart re-reads nothing it cannot prove",
+      "append": { "from": 0, "count": 40, "pad": 24576 },
+      "append_after": { "from": 40, "count": 3, "pad": 0 },
+      "env": { "DRILL_BATCH_HOLD_MS": 60000, "DRILL_BATCH_MAX_RECORDS": 40, "DRILL_FAULT": "slow-write:120" },
+      "restart_env": { "DRILL_BATCH_HOLD_MS": 20, "DRILL_BATCH_MAX_RECORDS": 40, "DRILL_FAULT": "" },
+      "expect": { "offsets": [40, 43], "bundles": 1 }
+    },
+    {
+      "name": "post-send-pre-ack",
+      "boundary": "post-send-pre-ack",
+      "window": "post_send_pre_ack",
+      "lake": "drop",
+      "claim": "an upload the lake accepted and dropped acks nothing, so the receipt stays pending through the kill and the same bytes ship once after the restart",
+      "append": { "from": 0, "count": 40, "pad": 24576 },
+      "env": { "DRILL_BATCH_HOLD_MS": 20, "DRILL_BATCH_MAX_RECORDS": 40 },
+      "restart_env": { "DRILL_BATCH_HOLD_MS": 20, "DRILL_BATCH_MAX_RECORDS": 40 },
+      "expect": { "offsets": [0, 40], "bundles": 1 }
+    },
+    {
+      "name": "post-ack-pre-cursor",
+      "boundary": "post-ack-pre-cursor",
+      "window": "post_ack_pre_cursor",
+      "lake": "ack",
+      "claim": "an ack the pipeline received but never committed replays a bundle the lake already holds; the lake absorbs the replay by digest, so the export is still exactly once",
+      "append": { "from": 0, "count": 4, "pad": 0 },
+      "env": { "DRILL_BATCH_HOLD_MS": 20, "DRILL_BATCH_MAX_RECORDS": 4, "DRILL_FAULT": "ack-hold:4000" },
+      "restart_env": { "DRILL_BATCH_HOLD_MS": 20, "DRILL_BATCH_MAX_RECORDS": 4, "DRILL_FAULT": "" },
+      "expect": { "offsets": [0, 4], "bundles": 1, "uploads_min": 2 }
+    }
+  ]
+}
