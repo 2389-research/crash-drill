@@ -26,9 +26,14 @@ make drill
        at the kill: cursor {'s:session': 40}, 1 owed ['sha256:636904fddb4c'], 1 published, 0 mid-write
        lake after: 1 bundle(s), 1 ack(s), 0 dropped, export offsets [0..39]
 [PASS] post-batch-pre-send@mid-write  (post-batch-pre-send, 0.6s)
+…                                       (one line of claim + evidence each)
 [PASS] post-send-pre-ack  (post-send-pre-ack, 0.6s)
 [PASS] post-ack-pre-cursor  (post-ack-pre-cursor, 0.6s)
+
+pipeline.py: 5 boundary probe(s), 5 passed, 0 failed
 ```
+
+(abridged: each row prints its claim and the state it observed at the kill.)
 
 And then:
 
@@ -69,8 +74,8 @@ python3 drill/drill.py \
 
 Adding a boundary, or a second instant inside one, is a JSON row in
 `drill/boundaries.json`. The harness is generic; your pipeline does not change. The
-reference inspector (`examples/spool/inspect.py`, ~100 lines) is the smallest
-complete example of the state the drill needs to see.
+reference inspector (`examples/spool/inspect.py`) is the smallest complete
+example of the state the drill needs to see.
 
 ## The reference pipeline
 
